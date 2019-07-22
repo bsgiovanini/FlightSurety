@@ -4,7 +4,7 @@ import Admin from "./Admin.vue";
 
 export default [
   {
-    path: "/",
+    path: "/passenger",
     component: Passenger
   },
   {

@@ -2,6 +2,11 @@
   <v-container>
     <Loading :loading="wait" />
     <v-alert :value="airlineRegistered$" dismissible type="success">Airline successfully registered</v-alert>
+    <v-alert
+      :value="airlineVoted$"
+      dismissible
+      type="success"
+    >Airline voted: vote {{airlineVoted$? airlineVoted$.votes: ""}} in {{airlineVoted$? airlineVoted$.registeredAirlines: ""}} airlines</v-alert>
     <v-alert :value="flightRegistered$" dismissible type="success">Flight successfully registered</v-alert>
     <v-alert :value="funded$" dismissible type="success">Amount successfully funded</v-alert>
     <v-layout row>
@@ -91,6 +96,7 @@ export default {
   subscriptions() {
     return {
       airlineRegistered$: contractService.airlineRegistered$,
+      airlineVoted$: contractService.airlineVoted$,
       flightRegistered$: contractService.flightRegistered$,
       funded$: contractService.funded$
     };
@@ -119,6 +125,9 @@ export default {
   },
   created() {
     this.$observables.airlineRegistered$.subscribe(msg => {
+      this.wait = false;
+    });
+    this.$observables.airlineVoted$.subscribe(msg => {
       this.wait = false;
     });
     this.$observables.flightRegistered$.subscribe(msg => {

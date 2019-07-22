@@ -9,7 +9,7 @@ contract AirlinesRole  {
 
      Roles.Role private airlines;
 
-     uint count = 0;
+     uint256 count = 0;
 
      modifier onlyAirlines() {
        require(airlines.has(msg.sender), "IS NOT AN AIRLINE REGISTERED");
@@ -24,13 +24,13 @@ contract AirlinesRole  {
     // Define a function 'addAirlines' that adds this role
     function addAirlines(address account) public {
         _addAirlines(account);
-        count.add(1);
+        count++;
     }
 
     // Define a function 'renounceAirlines' to renounce this role
     function renounceAirlines() public  onlyAirlines {
         _removeAirlines(msg.sender);
-        count.sub(1);
+        count--;
     }
 
     // Define an internal function '_addAirlines' to add this role, called by 'addAirlines'
@@ -43,7 +43,7 @@ contract AirlinesRole  {
         Roles.remove(airlines, account);
     }
 
-    function howManyAirLinesRegistered() public view returns (uint) {
+    function howManyAirLinesRegistered() public view returns (uint256) {
         return count;
     }
 

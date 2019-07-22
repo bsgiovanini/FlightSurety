@@ -15,7 +15,7 @@ contract FlightSuretyData {
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
-    mapping(address => bool) airLinesFunded;
+    mapping(address => uint256) airLinesFunded;
 
     mapping(address => uint256) creditByPassenger;
 
@@ -23,7 +23,10 @@ contract FlightSuretyData {
 
     mapping(bytes32 => address[]) passengersWhoBoughtFlight;
 
-    bytes32[] public flights;
+    bytes32[] flights;
+
+    mapping(bytes32 => Flight) flightByKey;
+
 
     /**
     * @dev Constructor
@@ -31,6 +34,13 @@ contract FlightSuretyData {
     */
     constructor() public {
         contractOwner = msg.sender;
+    }
+
+    struct Flight {
+        string name;
+        uint timestamp;
+        address airline;
+        bytes32 key;
     }
 
     /********************************************************************************************/
@@ -65,16 +75,6 @@ contract FlightSuretyData {
         _;
     }
 
-    modifier requireFundedEnough() {
-        require (msg.value >= 10000000000000000000, "Caller did not fund enough");
-        _;
-    }
-
-    modifier requireIsAirLineAllowed() {
-        require(isAirLineAllowed(msg.sender) == true, "Airline is not allowed");
-        _;
-    }
-
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
@@ -91,12 +91,27 @@ contract FlightSuretyData {
 
 
 
-    function addFlight(bytes32 flightkey) external requireIsOperational requireIsAirLineAllowed()  {
+    function addFlight(address airline, string flight, uint timestamp) external requireIsOperational  {
+
+        require(isAirLineAllowed(airline), "Airline not allowed");
+        bytes32 flightkey = getFlightKey(airline, flight, timestamp);
+        Flight memory f = Flight(flight, timestamp, airline, flightkey);
         flights.push(flightkey);
+        flightByKey[flightkey] = f;
     }
 
     function getFlights() public returns(bytes32[]){
         return flights;
+    }
+
+    function getFlightByKey(bytes32 key) external returns(string flight, uint timestamp, address airline, bytes32 fkey) {
+
+        Flight memory f = flightByKey[key];
+        flight = f.name;
+        timestamp = f.timestamp;
+        airline = f.airline;
+        fkey = f.key;
+        return (flight, timestamp, airline, fkey);
     }
     /**
     * @dev Sets contract operations on/off
@@ -150,12 +165,12 @@ contract FlightSuretyData {
     *      resulting in insurance payouts, the contract should be self-sustaining
     *
     */
-    function fund() external requireFundedEnough payable {
-        airLinesFunded[msg.sender] = true;
+    function fund(address airline) external payable {
+        airLinesFunded[airline] += msg.value;
     }
 
     function isAirLineAllowed (address airline) public returns (bool)  {
-        return airLinesFunded[airline] == true;
+        return airLinesFunded[airline] >= 10000000000000000000;
     }
 
     function getFlightKey(address airline, string memory flight, uint256 timestamp) internal pure returns(bytes32)

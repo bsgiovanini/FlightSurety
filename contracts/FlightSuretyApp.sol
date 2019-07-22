@@ -73,6 +73,11 @@ contract FlightSuretyApp is AccessControl {
         _;
     }
 
+    modifier requireUpto1ether() {
+        require(msg.value > 0 && msg.value <= 100000000000000000, "Should be up to 1 ether");
+        _;
+    }
+
    
     /********************************************************************************************/
     /*                                       CONSTRUCTOR                                        */
@@ -96,6 +101,10 @@ contract FlightSuretyApp is AccessControl {
         return dataContract.isOperational();  // Modify to call data contract's status
     }
 
+    function owner() public view returns(address) {
+        return contractOwner;
+    }
+
     function isOwner(address _address) public view returns (bool) {
         return _address == contractOwner;
     }
@@ -109,40 +118,41 @@ contract FlightSuretyApp is AccessControl {
     * @dev Add an airline to the registration queue
     *
     */
-    function registerAirline (address account)
+
+    function checkAirlineStatus(address airline) public returns(uint256 registeredAirlines, uint256 votes) {
+        registeredAirlines = howManyAirLinesRegistered();
+        votes = multiCalls[airline].length;
+        return (registeredAirlines, votes);
+    }
+
+    function registerAirline (address airline)
                             external
                             requireIsOperational
                             onlyAirlines
-                            returns(bool success, uint256 votes)
     {
-        success = false;
-        uint registeredAirLines = howManyAirLinesRegistered();
-        if (registeredAirLines <= 4) {
-            addAirlines(account);
-            success = true;
-        } else {
-            votes = multiCalls[account].length;
-            bool isDuplicate = false;
-            for(uint c = 0; c < votes; c++) {
-                if (multiCalls[account][c] == msg.sender) {
-                    isDuplicate = true;
-                }
-            }
-            require (!isDuplicate, "Caller has already called this function");
+        require(!isAirlines(airline), "AIRLINE ALREADY REGISTERED");
+        addAirlines(airline);
+        if (multiCalls[airline].length > 0) {
+            delete multiCalls[airline];
+         }
 
-            multiCalls[account].push(msg.sender);
-            votes = multiCalls[account].length;
-            if (multiCalls[account].length >= registeredAirLines.div(2) ) {
-                addAirlines(account);
-                delete multiCalls[account];
-                success = true;
+
+    }
+
+    function vote(address airline) external requireIsOperational onlyAirlines {
+        uint votes = multiCalls[airline].length;
+        bool isDuplicate = false;
+        for(uint c = 0; c < votes; c++) {
+            if (multiCalls[airline][c] == msg.sender) {
+                isDuplicate = true;
             }
         }
-        return (success, votes);
+        require (!isDuplicate, "Caller has already called this function");
+        multiCalls[airline].push(msg.sender);
     }
 
     function fund () external requireIsOperational onlyAirlines payable {
-        dataContract.fund.value(msg.value);
+        dataContract.fund.value(msg.value)(msg.sender);
     }
 
 
@@ -152,12 +162,19 @@ contract FlightSuretyApp is AccessControl {
     */
     function registerFlight(string flight, uint256 timestamp) external onlyAirlines requireAirlineIsAllowed
     {
-        bytes32 flightkey = getFlightKey(msg.sender, flight, timestamp);
-        dataContract.addFlight(flightkey);
+        dataContract.addFlight(msg.sender, flight, timestamp);
     }
 
     function getFlights() public returns(bytes32[]) {
         return dataContract.getFlights();
+    }
+
+    function getFlightByKey(bytes32 key) external returns(string flight, uint timestamp, address airline, bytes32 fkey) {
+        return dataContract.getFlightByKey(key);
+    }
+
+    function isAirlineAllowed(address airline) public returns(bool) {
+        return dataContract.isAirLineAllowed(airline);
     }
     
    /**
@@ -165,7 +182,7 @@ contract FlightSuretyApp is AccessControl {
     *
     */
     function processFlightStatus(address airline, string flight, uint256 timestamp, uint8 statusCode) public {
-        if (statusCode == 2) {
+        if (statusCode == 20) {
             dataContract.creditInsurees(airline, flight, timestamp);
         }
     }
@@ -176,11 +193,11 @@ contract FlightSuretyApp is AccessControl {
                         (
                             address airline,
                             string flight,
-                            uint256 timestamp                            
+                            uint256 timestamp
                         )
                         external
     {
-        uint8 index = getRandomIndex(msg.sender);
+        uint8 index = getRandomIndex(contractOwner);
 
         // Generate a unique key for storing the request
         bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp));
@@ -190,9 +207,12 @@ contract FlightSuretyApp is AccessControl {
                                             });
 
         emit OracleRequest(index, airline, flight, timestamp);
-    } 
+    }
 
-
+    function buy(address passenger, address airline, string flight, uint256 timestamp) external
+      isOperational onlyPassenger requireUpto1ether payable {
+        dataContract.buy.value(msg.value)(passenger, airline, flight, timestamp);
+    }
 // region ORACLE MANAGEMENT
 
     // Incremented to add pseudo-randomness at various points
@@ -211,7 +231,7 @@ contract FlightSuretyApp is AccessControl {
     }
 
     // Track all registered oracles
-    mapping(address => Oracle) private oracles;
+    mapping(address => Oracle[]) private oracles;
 
     // Model for responses from oracles
     struct ResponseInfo {
@@ -247,24 +267,19 @@ contract FlightSuretyApp is AccessControl {
         // Require registration fee
         require(msg.value >= REGISTRATION_FEE, "Registration fee is required");
 
-        uint8[3] memory indexes = generateIndexes(msg.sender);
+        uint8[3] memory indexes = generateIndexes(contractOwner);
 
-        oracles[msg.sender] = Oracle({
+        oracles[contractOwner].push(Oracle({
                                         isRegistered: true,
                                         indexes: indexes
-                                    });
+                                    }));
     }
 
-    function getMyIndexes
-                            (
-                            )
-                            view
-                            external
-                            returns(uint8[3])
+    function getMyIndexes(uint i) external view returns(uint8[3])
     {
-        require(oracles[msg.sender].isRegistered, "Not registered as an oracle");
+        require(oracles[contractOwner][i].isRegistered, "Not registered as an oracle");
 
-        return oracles[msg.sender].indexes;
+        return oracles[contractOwner][i].indexes;
     }
 
 
@@ -284,13 +299,18 @@ contract FlightSuretyApp is AccessControl {
                         )
                         external
     {
-        require((oracles[msg.sender].indexes[0] == index) || (oracles[msg.sender].indexes[1] == index) || (oracles[msg.sender].indexes[2] == index), "Index does not match oracle request");
+        bool indexAvailable = false;
+        for(uint i = 0; i < oracles[contractOwner].length; i++) {
+            indexAvailable = indexAvailable ||
+               ((oracles[contractOwner][i].indexes[0] == index) || (oracles[contractOwner][i].indexes[1] == index) || (oracles[contractOwner][i].indexes[2] == index));
+        }
+        require(indexAvailable == true, "Index does not match oracle request");
 
 
         bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp));
         require(oracleResponses[key].isOpen, "Flight or timestamp do not match oracle request");
 
-        oracleResponses[key].responses[statusCode].push(msg.sender);
+        oracleResponses[key].responses[statusCode].push(contractOwner);
 
         // Information isn't considered verified until at least MIN_RESPONSES
         // oracles respond with the *** same *** information
@@ -369,13 +389,15 @@ contract FlightSuretyApp is AccessControl {
 contract FlightSuretyData {
     function isOperational() external returns(bool);
 
-    function fund() external payable;
+    function fund(address airline) external payable;
 
     function pay() external;
 
-    function addFlight(bytes32 flightkey) external;
+    function addFlight(address airline, string flight, uint timestamp) external;
 
     function getFlights() external returns(bytes32[]);
+
+    function getFlightByKey(bytes32 key) external returns(string flight, uint timestamp, address airline, bytes32 fkey);
 
     function creditInsurees(address airline, string flight, uint256 timestamp) external;
 
