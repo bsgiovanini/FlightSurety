@@ -8,8 +8,13 @@ import AppVue from "./App.vue";
 
 import "vuetify/dist/vuetify.min.css";
 
+import currency from "v-currency-field";
+
+import "v-currency-field/dist/index.css";
+
 Vue.use(Vuetify);
 Vue.use(VueRx);
+Vue.use(currency);
 
 const router = new VueRouter({
   routes // short for `routes: routes`

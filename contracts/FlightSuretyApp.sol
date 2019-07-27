@@ -73,12 +73,11 @@ contract FlightSuretyApp is AccessControl {
         _;
     }
 
-    modifier requireUpto1ether() {
-        require(msg.value > 0 && msg.value <= 100000000000000000, "Should be up to 1 ether");
+    modifier requirenotBeAirlines() {
+        require (!isAirlines(msg.sender), "Should not be airlines");
         _;
     }
 
-   
     /********************************************************************************************/
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
@@ -99,6 +98,10 @@ contract FlightSuretyApp is AccessControl {
 
     function isOperational() public returns(bool) {
         return dataContract.isOperational();  // Modify to call data contract's status
+    }
+
+    function setOperatingStatus(bool status) public {
+        dataContract.setOperatingStatus(status, msg.sender);  // Modify to call data contract's status
     }
 
     function owner() public view returns(address) {
@@ -160,7 +163,7 @@ contract FlightSuretyApp is AccessControl {
     * @dev Register a future flight for insuring.
     *
     */
-    function registerFlight(string flight, uint256 timestamp) external onlyAirlines requireAirlineIsAllowed
+    function registerFlight(string flight, uint256 timestamp) external requireIsOperational onlyAirlines  requireAirlineIsAllowed
     {
         dataContract.addFlight(msg.sender, flight, timestamp);
     }
@@ -181,7 +184,7 @@ contract FlightSuretyApp is AccessControl {
     * @dev Called after oracle has updated flight status
     *
     */
-    function processFlightStatus(address airline, string flight, uint256 timestamp, uint8 statusCode) public {
+    function processFlightStatus(address airline, string flight, uint256 timestamp, uint8 statusCode) internal {
         if (statusCode == 20) {
             dataContract.creditInsurees(airline, flight, timestamp);
         }
@@ -209,14 +212,26 @@ contract FlightSuretyApp is AccessControl {
         emit OracleRequest(index, airline, flight, timestamp);
     }
 
-    function buy(address passenger, address airline, string flight, uint256 timestamp) external
-      isOperational onlyPassenger requireUpto1ether payable {
-        dataContract.buy.value(msg.value)(passenger, airline, flight, timestamp);
+    function buy(address passenger, bytes32 key) external payable
+      requireIsOperational requirenotBeAirlines {
+        require(msg.value > 0 ether, "Should greater than 0 ether");
+        require(msg.value <= 1 ether, "Should be less than 1 ether");
+        dataContract.buy.value(msg.value)(passenger, key);
     }
+
+    function getPassengerAmount(address passenger, bytes32 key) external  returns(uint) {
+        return dataContract.getAmountPayedByPassengerAndFlight(passenger, key);
+    }
+
+    function pay(address passenger) external requireIsOperational payable  {
+        require(passenger == msg.sender, "Caller is not the passenger");
+        dataContract.pay(msg.sender);
+    }
+
 // region ORACLE MANAGEMENT
 
     // Incremented to add pseudo-randomness at various points
-    uint8 private nonce = 0;    
+    uint8 private nonce = 0;
 
     // Fee to be paid when registering oracle
     uint256 public constant REGISTRATION_FEE = 1 ether;
@@ -258,11 +273,7 @@ contract FlightSuretyApp is AccessControl {
 
 
     // Register an oracle with the contract
-    function registerOracle
-                            (
-                            )
-                            external
-                            payable
+    function registerOracle() external requireIsOperational payable
     {
         // Require registration fee
         require(msg.value >= REGISTRATION_FEE, "Registration fee is required");
@@ -308,7 +319,7 @@ contract FlightSuretyApp is AccessControl {
 
 
         bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp));
-        require(oracleResponses[key].isOpen, "Flight or timestamp do not match oracle request");
+        require(oracleResponses[key].isOpen, "Response already sent for this flight");
 
         oracleResponses[key].responses[statusCode].push(contractOwner);
 
@@ -321,6 +332,8 @@ contract FlightSuretyApp is AccessControl {
 
             // Handle flight status as appropriate
             processFlightStatus(airline, flight, timestamp, statusCode);
+
+            oracleResponses[key].isOpen = false;
         }
     }
 
@@ -331,47 +344,33 @@ contract FlightSuretyApp is AccessControl {
                             string flight,
                             uint256 timestamp
                         )
-                        pure
-                        internal
-                        returns(bytes32)
+                        internal pure returns(bytes32)
     {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
     }
 
     // Returns array of three non-duplicating integers from 0-9
-    function generateIndexes
-                            (                       
-                                address account         
-                            )
+    function generateIndexes (address account)
                             internal
                             returns(uint8[3])
     {
         uint8[3] memory indexes;
         indexes[0] = getRandomIndex(account);
-        
         indexes[1] = indexes[0];
         while(indexes[1] == indexes[0]) {
             indexes[1] = getRandomIndex(account);
         }
-
         indexes[2] = indexes[1];
         while((indexes[2] == indexes[0]) || (indexes[2] == indexes[1])) {
             indexes[2] = getRandomIndex(account);
         }
-
         return indexes;
     }
 
     // Returns array of three non-duplicating integers from 0-9
-    function getRandomIndex
-                            (
-                                address account
-                            )
-                            internal
-                            returns (uint8)
+    function getRandomIndex(address account) internal returns (uint8)
     {
         uint8 maxValue = 10;
-
         // Pseudo random number...the incrementing nonce adds variation
         uint8 random = uint8(uint256(keccak256(abi.encodePacked(blockhash(block.number - nonce++), account))) % maxValue);
 
@@ -391,8 +390,6 @@ contract FlightSuretyData {
 
     function fund(address airline) external payable;
 
-    function pay() external;
-
     function addFlight(address airline, string flight, uint timestamp) external;
 
     function getFlights() external returns(bytes32[]);
@@ -402,4 +399,12 @@ contract FlightSuretyData {
     function creditInsurees(address airline, string flight, uint256 timestamp) external;
 
     function isAirLineAllowed (address airline) public returns (bool);
+
+    function buy(address passenger, bytes32 flightkey) external payable;
+
+    function getAmountPayedByPassengerAndFlight(address passenger, bytes32 flightkey) external pure returns (uint);
+
+    function pay(address passenger) external payable;
+
+    function setOperatingStatus (bool mode, address sender) external;
 }

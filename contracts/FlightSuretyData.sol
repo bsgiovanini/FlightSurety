@@ -62,18 +62,20 @@ contract FlightSuretyData {
     }
 
     modifier requireUpto1ether() {
-        require(msg.value > 0 && msg.value <= 100000000000000000, "Should be up to 1 ether");
+        require(msg.value > 0 && msg.value <= 1 ether, "Should be up to 1 ether");
         _;
     }
 
     /**
     * @dev Modifier that requires the "ContractOwner" account to be the function caller
     */
-    modifier requireContractOwner()
+    modifier requireContractOwner(address sender)
     {
-        require(msg.sender == contractOwner, "Caller is not contract owner");
+        require(sender == contractOwner, "Caller is not contract owner");
         _;
     }
+
+    event CreditIssuedForPassenger(address passenger, uint256 credit);
 
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
@@ -118,7 +120,7 @@ contract FlightSuretyData {
     *
     * When operational mode is disabled, all write transactions except for this one will fail
     */
-    function setOperatingStatus (bool mode) external requireContractOwner
+    function setOperatingStatus (bool mode, address sender) external requireContractOwner(sender)
     {
         operational = mode;
     }
@@ -131,9 +133,8 @@ contract FlightSuretyData {
     * @dev Buy insurance for a flight
     *
     */
-    function buy(address passenger, address airline, string flight, uint256 timestamp) external requireUpto1ether payable
+    function buy(address passenger, bytes32 flightkey) external requireIsOperational requireUpto1ether  payable
     {
-        bytes32 flightkey = getFlightKey(airline, flight, timestamp);
         amountPayedByPassengerAndFlight[passenger][flightkey] = msg.value;
         passengersWhoBoughtFlight[flightkey].push(passenger);
     }
@@ -141,23 +142,37 @@ contract FlightSuretyData {
     /**
      *  @dev Credits payouts to insurees
     */
-    function creditInsurees(address airline, string flight, uint256 timestamp) external
+    function creditInsurees(address airline, string flight, uint256 timestamp) external requireIsOperational
     {
         bytes32 flightkey = getFlightKey(airline, flight, timestamp);
-        for (uint i = 0; i < passengersWhoBoughtFlight[flightkey].length; i ++) {
+
+        uint numberOfPassengers = passengersWhoBoughtFlight[flightkey].length;
+        for (uint i = 0; i < numberOfPassengers; i ++) {
             address passenger = passengersWhoBoughtFlight[flightkey][i];
-            creditByPassenger[passenger] = amountPayedByPassengerAndFlight[passenger][flightkey].add(
+            uint256 credit = amountPayedByPassengerAndFlight[passenger][flightkey].add(
                 amountPayedByPassengerAndFlight[passenger][flightkey].div(2));
+            creditByPassenger[passenger] = credit;
+            amountPayedByPassengerAndFlight[passenger][flightkey] = 0;
+            emit CreditIssuedForPassenger(passenger, credit);
         }
+
+        for (i = 0; i < numberOfPassengers; i ++) {
+            delete passengersWhoBoughtFlight[flightkey][i];
+        }
+
     }
 
     /**
      *  @dev Transfers eligible payout funds to insuree
      *
     */
-    function pay(address passenger) external
+    function pay(address passenger) external requireIsOperational payable
     {
-        passenger.transfer(creditByPassenger[passenger]);
+        require(creditByPassenger[passenger] > 0, "Passenger has not credit");
+        uint credit = creditByPassenger[passenger];
+        creditByPassenger[passenger] = 0;
+        passenger.transfer(credit);
+        emit CreditIssuedForPassenger(passenger, creditByPassenger[passenger]);
     }
 
    /**
@@ -165,7 +180,7 @@ contract FlightSuretyData {
     *      resulting in insurance payouts, the contract should be self-sustaining
     *
     */
-    function fund(address airline) external payable {
+    function fund(address airline) external requireIsOperational payable {
         airLinesFunded[airline] += msg.value;
     }
 
@@ -178,12 +193,14 @@ contract FlightSuretyData {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
     }
 
+    function getAmountPayedByPassengerAndFlight(address passenger, bytes32 flightkey) external view returns(uint) {
+        return amountPayedByPassengerAndFlight[passenger][flightkey];
+    }
+
     /**
     * @dev Fallback function for funding smart contract.
     *
     */
-    
-
 
 }
 

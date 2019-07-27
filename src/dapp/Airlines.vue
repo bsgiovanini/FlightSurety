@@ -50,7 +50,7 @@
                     <v-text-field v-model="amount" label="Enter amount in Ether"></v-text-field>
                   </v-flex>
                   <v-flex xs4 sm4 md4>
-                    <v-btn @click="fund" success>Fund</v-btn>
+                    <v-btn :disabled="!amount || isNaN(amount)" @click="fund" success>Fund</v-btn>
                   </v-flex>
                 </div>
               </v-card-text>
@@ -75,7 +75,7 @@
                     <v-text-field v-model="flight" label="Enter Flight Number"></v-text-field>
                   </v-flex>
                   <v-flex xs4 sm4 md4>
-                    <v-btn @click="registerFlight" success>Register</v-btn>
+                    <v-btn :disabled="!isAirlineAllowed$" @click="registerFlight" success>Register</v-btn>
                   </v-flex>
                 </div>
               </v-card-text>
@@ -95,10 +95,13 @@ export default {
   },
   subscriptions() {
     return {
+      contractLoaded$: contractService.contractLoaded$,
       airlineRegistered$: contractService.airlineRegistered$,
       airlineVoted$: contractService.airlineVoted$,
       flightRegistered$: contractService.flightRegistered$,
-      funded$: contractService.funded$
+      funded$: contractService.funded$,
+      isAirlineAllowed$: contractService.isAirlineAllowed$,
+      error$: contractService.error$
     };
   },
   data() {
@@ -121,9 +124,18 @@ export default {
     fund() {
       contractService.fund(this.amount);
       this.wait = true;
+    },
+    checkAirlineAllowed() {
+      contractService.isAirlineAllowed();
     }
   },
   created() {
+    this.$observables.contractLoaded$.subscribe(isLoaded => {
+      if (isLoaded) {
+        this.checkAirlineAllowed();
+      }
+    });
+
     this.$observables.airlineRegistered$.subscribe(msg => {
       this.wait = false;
     });
@@ -134,6 +146,9 @@ export default {
       this.wait = false;
     });
     this.$observables.funded$.subscribe(msg => {
+      this.wait = false;
+    });
+    this.$observables.error$.subscribe(msg => {
       this.wait = false;
     });
   }

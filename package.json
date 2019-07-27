@@ -46,6 +46,7 @@
     "compile": "0.0.2",
     "copy-webpack-plugin": "^5.0.3",
     "rxjs": "^6.5.2",
+    "v-currency-field": "^1.0.6",
     "vue": "^2.6.10",
     "vue-router": "^3.0.6",
     "vue-rx": "^6.2.0",

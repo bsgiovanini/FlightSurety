@@ -5,7 +5,7 @@ import express from "express";
 
 const STATUS_CODES = [0, 10, 20, 30, 40, 50];
 
-const NUM_ORACLES = 10;
+const NUM_ORACLES = 30;
 
 let config = Config["localhost"];
 let web3 = new Web3(
@@ -50,11 +50,8 @@ async function deal() {
       if (error) {
         console.log(error);
       } else {
-        console.log("event: ", event.returnValues.index);
-
         for (let i = 0; i < NUM_ORACLES; i++) {
           let indexes = await flightSuretyApp.methods.getMyIndexes(i).call();
-          console.log(indexes);
           if (indexes.indexOf(event.returnValues.index) >= 0) {
             const pos = getRndInteger(0, STATUS_CODES.length - 1);
             await flightSuretyApp.methods

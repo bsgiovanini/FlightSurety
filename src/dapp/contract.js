@@ -1,4 +1,5 @@
 import FlightSuretyApp from "../../build/contracts/FlightSuretyApp.json";
+import FlightSuretyData from "../../build/contracts/FlightSuretyData.json";
 import Config from "./config.json";
 import Web3 from "web3";
 import { Subject, BehaviorSubject } from "rxjs";
@@ -12,6 +13,7 @@ class Contract {
     this.passengers = [];
     this.contractLoaded$ = new BehaviorSubject();
     this.isOperational$ = new Subject();
+    this.operationalSetted$ = new Subject();
     this.flightStatus$ = new Subject();
     this.role$ = new BehaviorSubject();
     this.airlineRegistered$ = new Subject();
@@ -20,14 +22,12 @@ class Contract {
     this.airlineVoted$ = new Subject();
     this.getFlights$ = new Subject();
     this.flightStatusReturned$ = new Subject();
-    this.ticketExpired$ = new Subject();
-    this.ticketsOnSaleLoaded$ = new Subject();
-    this.ticketBought$ = new Subject();
-    this.ticketIsOnSocialSale$ = new Subject();
-    this.ticketsOnSocialSaleLoaded$ = new Subject();
-    this.ticketPriceBySocialTicket$ = new Subject();
-    this.ticketSocialBought$ = new Subject();
-    this.ticketExecuted$ = new Subject();
+    this.ensuranceBought$ = new Subject();
+    this.amountReturned$ = new Subject();
+    this.credit$ = new BehaviorSubject();
+    this.payed$ = new Subject();
+    this.isAirlineAllowed$ = new Subject();
+    this.error$ = new Subject();
 
     if (window.ethereum) {
       // use MetaMask's provider
@@ -74,6 +74,30 @@ class Contract {
           }
         );
       });
+      this.web3.eth.net.getId().then(networkId => {
+        const deployedNetwork = FlightSuretyData.networks[networkId];
+        this.metad = new this.web3.eth.Contract(
+          FlightSuretyData.abi,
+          deployedNetwork.address
+        );
+
+        this.metad.events.CreditIssuedForPassenger(
+          {
+            fromBlock: 0
+          },
+          async (error, event) => {
+            if (error) {
+              console.log(error);
+            } else {
+              if (this.account == event.returnValues.passenger) {
+                this.credit$.next(
+                  event.returnValues.credit / 1000000000000000000
+                );
+              }
+            }
+          }
+        );
+      });
 
       // get accounts
     } catch (error) {
@@ -89,6 +113,16 @@ class Contract {
       .call({ from: self.account })
       .then(is => {
         this.isOperational$.next(is);
+      });
+  }
+
+  setOperatingStatus(status) {
+    const { setOperatingStatus } = this.meta.methods;
+    setOperatingStatus(status)
+      .send({ from: this.account })
+      .then(msg => {
+        this.operationalSetted$.next(true);
+        this.isOperational();
       });
   }
 
@@ -144,6 +178,9 @@ class Contract {
             })
             .then(msg => {
               this.airlineRegistered$.next(msg);
+            })
+            .catch(error => {
+              this.error$.next(error);
             });
         } else {
           if (status.votes < status.registeredAirlines / 2) {
@@ -155,20 +192,57 @@ class Contract {
                 checkAirlineStatus(address)
                   .call()
                   .then(statusAfter => {
-                    this.airlineVoted$.next(statusAfter);
+                    if (
+                      statusAfter.votes >=
+                      statusAfter.registeredAirlines / 2
+                    ) {
+                      registerAirline(address)
+                        .send({
+                          from: this.account
+                        })
+                        .then(msg => {
+                          this.airlineRegistered$.next(msg);
+                        })
+                        .catch(error => {
+                          this.error$.next(error);
+                        });
+                    } else {
+                      this.airlineVoted$.next(statusAfter);
+                    }
                   });
+              })
+              .catch(error => {
+                this.error$.next(error);
               });
           }
         }
+      })
+      .catch(error => {
+        this.error$.next(error);
       });
   }
 
   registerFlight(flight) {
-    const { registerFlight, isAirlineAllowed } = this.meta.methods;
+    const { registerFlight } = this.meta.methods;
     registerFlight(flight, new Date().getTime())
       .send({ from: this.account })
       .then(msg => {
         this.flightRegistered$.next(msg);
+      })
+      .catch(error => {
+        this.error$.next(error);
+      });
+  }
+
+  isAirlineAllowed() {
+    const { isAirlineAllowed } = this.meta.methods;
+    isAirlineAllowed(this.account)
+      .call()
+      .then(is => {
+        this.isAirlineAllowed$.next(is);
+      })
+      .catch(error => {
+        this.error$.next(error);
       });
   }
 
@@ -179,6 +253,10 @@ class Contract {
       .send({ from: this.account, value: amountInWei })
       .then(msg => {
         this.funded$.next(msg);
+        this.isAirlineAllowed();
+      })
+      .catch(error => {
+        this.error$.next(error);
       });
   }
 
@@ -191,18 +269,56 @@ class Contract {
         resp.forEach(flightkey => {
           promises.push(getFlightByKey(flightkey).call());
         });
-        Promise.all(promises).then(flights => {
-          this.getFlights$.next(flights);
-        });
+        Promise.all(promises)
+          .then(flights => {
+            this.getFlights$.next(flights);
+          })
+          .catch(error => {
+            this.error$.next(error);
+          });
+      })
+      .catch(error => {
+        this.error$.next(error);
       });
   }
 
-  putTicketOnSale(barCode, price) {
-    const { putTicketOnSale } = this.meta.methods;
-    putTicketOnSale(barCode, price)
+  buy(fkey, amount) {
+    const { buy } = this.meta.methods;
+    const amountInWei = amount * 1000000000000000000;
+    buy(this.account, fkey)
+      .send({ from: this.account, value: amountInWei })
+      .then(msg => {
+        this.ensuranceBought$.next({ passenger: this.account, fkey });
+      })
+      .catch(error => {
+        this.error$.next(error);
+      });
+  }
+
+  getPassengerAmount(fkey) {
+    const { getPassengerAmount } = this.meta.methods;
+    getPassengerAmount(this.account, fkey)
+      .call()
+      .then(amount => {
+        this.amountReturned$.next({
+          value: amount / 1000000000000000000,
+          fkey
+        });
+      })
+      .catch(error => {
+        this.error$.next(error);
+      });
+  }
+
+  withdraw() {
+    const { pay } = this.meta.methods;
+    pay(this.account)
       .send({ from: this.account })
       .then(msg => {
-        this.ticketIsOnSale$.next({ barCode, price });
+        this.payed$.next(this.account);
+      })
+      .catch(error => {
+        this.error$.next(error);
       });
   }
 }

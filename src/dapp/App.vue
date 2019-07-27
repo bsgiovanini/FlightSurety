@@ -20,13 +20,39 @@
 
           <v-list-tile-content>
             <v-list-tile-title>{{role.title}}</v-list-tile-title>
-            <v-list-tile-sub-title>isOperational: {{isOperational$}}</v-list-tile-sub-title>
+            <v-list-tile-sub-title>
+              Operating Status:
+              <v-icon color="green" v-if="isOperational$">thumb_up</v-icon>
+              <v-icon color="red" v-if="!isOperational$">thumb_down</v-icon>
+            </v-list-tile-sub-title>
           </v-list-tile-content>
+        </v-list-tile>
+      </v-list>
+      <v-divider></v-divider>
+      <v-list dense class="pt-0" v-if="role.title=='Passenger'">
+        <v-list-tile>
+          <v-list-tile-content>
+            <v-list-tile-title>Your Credit</v-list-tile-title>
+            <v-list-tile-sub-title>Amount: {{credit$ || 0}} Ether</v-list-tile-sub-title>
+          </v-list-tile-content>
+          <v-list-tile-action>
+            <v-btn
+              :disabled="credit$ == null || credit$ <= 0"
+              flat
+              icon
+              color="green"
+              title="Withdraw your credit!"
+              @click="withdraw"
+            >
+              <v-icon>account_balance_wallet</v-icon>
+            </v-btn>
+          </v-list-tile-action>
         </v-list-tile>
       </v-list>
     </v-navigation-drawer>
     <v-content>
       <v-container fluid>
+        <v-alert :value="error$" dismissible type="error">An error ocurred</v-alert>
         <router-view></router-view>
       </v-container>
     </v-content>
@@ -41,7 +67,9 @@ export default {
     return {
       contractLoaded$: contractService.contractLoaded$,
       isOperational$: contractService.isOperational$,
-      role$: contractService.role$
+      role$: contractService.role$,
+      credit$: contractService.credit$,
+      error$: contractService.error$
     };
   },
   data() {
@@ -52,17 +80,6 @@ export default {
         airlines: { link: "/airlines", icon: "home", title: "Airlines" },
         passenger: { link: "/passenger", icon: "home", title: "Passenger" },
         admin: { link: "/admin", icon: "home", title: "Admin" }
-        /*eventOrganizer: {
-          link: "/eventOrganizer",
-          icon: "home",
-          title: "Organizer"
-        },
-        eventExecutor: {
-          link: "/eventExecutor",
-          icon: "home",
-          title: "Executor"
-        },
-        socialMember: { link: "/home", icon: "home", title: "Member" }*/
       }
     };
   },
@@ -72,6 +89,9 @@ export default {
     },
     checkRole() {
       contractService.role();
+    },
+    withdraw() {
+      contractService.withdraw();
     }
   },
   created() {
