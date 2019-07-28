@@ -132,6 +132,7 @@ contract FlightSuretyApp is AccessControl {
                             external
                             requireIsOperational
                             onlyAirlines
+                            requireAirlineIsAllowed
     {
         require(!isAirlines(airline), "AIRLINE ALREADY REGISTERED");
         addAirlines(airline);
@@ -142,7 +143,7 @@ contract FlightSuretyApp is AccessControl {
 
     }
 
-    function vote(address airline) external requireIsOperational onlyAirlines {
+    function vote(address airline) external requireIsOperational onlyAirlines requireAirlineIsAllowed {
         uint votes = multiCalls[airline].length;
         bool isDuplicate = false;
         for(uint c = 0; c < votes; c++) {

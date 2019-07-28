@@ -16,16 +16,16 @@
             <v-flex xs6>
               <v-card-title primary-title>
                 <div>
-                  <div class="headline">Airline Registering</div>
+                  <div class="headline">Contract Funding</div>
                 </div>
               </v-card-title>
               <v-card-text>
                 <div>
                   <v-flex xs10 sm10 md10>
-                    <v-text-field v-model="address" label="Enter Airline Address"></v-text-field>
+                    <v-text-field v-model="amount" label="Enter amount in Ether"></v-text-field>
                   </v-flex>
                   <v-flex xs4 sm4 md4>
-                    <v-btn @click="registerAirline" success>Register</v-btn>
+                    <v-btn :disabled="!amount || isNaN(amount)" @click="fund" success>Fund</v-btn>
                   </v-flex>
                 </div>
               </v-card-text>
@@ -41,16 +41,16 @@
             <v-flex xs6>
               <v-card-title primary-title>
                 <div>
-                  <div class="headline">Contract Funding</div>
+                  <div class="headline">Airline Registering</div>
                 </div>
               </v-card-title>
               <v-card-text>
                 <div>
                   <v-flex xs10 sm10 md10>
-                    <v-text-field v-model="amount" label="Enter amount in Ether"></v-text-field>
+                    <v-text-field v-model="address" label="Enter Airline Address"></v-text-field>
                   </v-flex>
                   <v-flex xs4 sm4 md4>
-                    <v-btn :disabled="!amount || isNaN(amount)" @click="fund" success>Fund</v-btn>
+                    <v-btn :disabled="!isAirlineAllowed$" @click="registerAirline" success>Register</v-btn>
                   </v-flex>
                 </div>
               </v-card-text>
