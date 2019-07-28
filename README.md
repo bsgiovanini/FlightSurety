@@ -4,7 +4,7 @@ FlightSurety is a project developed as an assignment for Udacity's Blockchain co
 
 ## Contracts
 
-Two contracts were built (FlightSuretyData.sol and FlightSuretyApp.sol) as required.
+Two contracts were built (FlightSuretyData.sol and FlightSuretyApp.sol) as required. Be aware to change the address of the first airline in deploy_contracts.js. I also used Ganache on http://localhost:7545
 
 ## Server
 
@@ -45,13 +45,21 @@ To build dapp for prod:
 
 Deploy the contents of the ./dapp folder
 
-## Roles
+## Contexts
 
-There are basically three roles: Admin, Airline and Passenger
+There are basically three contexts: Admin, Airline and Passenger
 
 ### Admin
 
-Only the Admin can set the operating status of the contract.
+Only the Admin can set the operating status of the contract. In his page, he can set tehe status of the contract
+
+### Airline
+
+Only airlines can register other airlines. Firstly, arline must fund the contract (10 ether) to be able to register other airlines. Any value can be funded, but only when they sum 10 ether is that the airline will be allowed to register new airlines and flights. The airline address must be filled in the text field. From the moment the contract have 5 airlines registered, a vote system starts to register new airlines according to the project requirement. After funding, airlines can now register flights and make them available to passengers.
+
+### Passenger
+
+All registered flights by airlines will be displayed in a table for passengers. If a address is not registered as an airline, it will be considered a passenger. In this table, there are two buttons: ($) is for buying surety  for that flight and the right most refresh buttom is responsable for refreshing the status of that flight. the ($) buttom is for buying surety for that flight up to 1 ether. One passenger can only buy surety for that flight once. The latter buttom refresh the field status of the table. If the status 20 is returned and that passenger bought surety, credit will ge generated and displayed in the left part of the screen ("Your credit"). If there is credit available. the "wallet" buttom is enabled and the passenger can choose withdraw his credit anytime.
 
 ## Resources
 
